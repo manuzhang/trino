@@ -287,6 +287,7 @@ public class TransactionLogAccess
     {
         Map<String, AddFileEntry> activeJsonEntries = new LinkedHashMap<>();
         HashSet<String> removedFiles = new HashSet<>();
+        HashSet<String> dependOnDeletionVector = new HashSet<>();
 
         // The json entries containing the last few entries in the log need to be applied on top of the parquet snapshot:
         // - Any files which have been removed need to be excluded
@@ -295,12 +296,16 @@ public class TransactionLogAccess
             AddFileEntry addEntry = deltaLakeTransactionLogEntry.getAdd();
             if (addEntry != null) {
                 activeJsonEntries.put(addEntry.getPath(), addEntry);
+                addEntry.getDeletionVector().ifPresent(deletionVector -> dependOnDeletionVector.add(addEntry.getPath()));
             }
 
             RemoveFileEntry removeEntry = deltaLakeTransactionLogEntry.getRemove();
             if (removeEntry != null) {
-                activeJsonEntries.remove(removeEntry.getPath());
                 removedFiles.add(removeEntry.getPath());
+                if (!dependOnDeletionVector.contains(removeEntry.getPath())) {
+                    // Deletion vector registers both 'add' & 'remove' entries and 'add' entry should be kept
+                    activeJsonEntries.remove(removeEntry.getPath());
+                }
             }
         });
 

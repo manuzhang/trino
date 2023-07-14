@@ -59,6 +59,33 @@ public class TestDeltaLakeDatabricksDelete
         onTrino().executeQuery("DROP TABLE " + tableName);
     }
 
+    @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_OSS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, DELTA_LAKE_EXCLUDE_104, DELTA_LAKE_EXCLUDE_113, PROFILE_SPECIFIC_TESTS})
+    @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)
+    public void testDeleteOnAppendOnlyFeatureFails()
+    {
+        String tableName = "test_delete_on_append_only_feature_fails_" + randomNameSuffix();
+        onDelta().executeQuery("" +
+                "CREATE TABLE default." + tableName +
+                "(a INT, b INT)" +
+                "USING delta " +
+                "LOCATION 's3://" + bucketName + "/databricks-compatibility-test-" + tableName + "'" +
+                "TBLPROPERTIES ('delta.minWriterVersion'='7', 'delta.appendOnly' = true)");
+        try {
+            onDelta().executeQuery("INSERT INTO default." + tableName + " VALUES (1,11), (2, 12)");
+
+            assertQueryFailure(() -> onDelta().executeQuery("DELETE FROM default." + tableName + " WHERE a = 1"))
+                    .hasMessageContaining("This table is configured to only allow appends");
+            assertQueryFailure(() -> onTrino().executeQuery("DELETE FROM delta.default." + tableName + " WHERE a = 1"))
+                    .hasMessageContaining("Cannot modify rows from a table with 'delta.appendOnly' set to true");
+
+            assertThat(onDelta().executeQuery("SELECT * FROM default." + tableName))
+                    .containsOnly(row(1, 11), row(2, 12));
+        }
+        finally {
+            onTrino().executeQuery("DROP TABLE delta.default." + tableName);
+        }
+    }
+
     // Databricks 12.1 and OSS Delta 2.4.0 added support for deletion vectors
     @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_OSS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, DELTA_LAKE_EXCLUDE_104, DELTA_LAKE_EXCLUDE_113, PROFILE_SPECIFIC_TESTS})
     @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)

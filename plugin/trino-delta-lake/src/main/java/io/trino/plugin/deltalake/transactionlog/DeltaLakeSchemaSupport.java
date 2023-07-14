@@ -94,6 +94,13 @@ public final class DeltaLakeSchemaSupport
             .add("columnMapping")
             .add("timestampNtz")
             .build();
+    private static final Set<String> SUPPORTED_WRITER_FEATURES = ImmutableSet.<String>builder()
+            .add("appendOnly")
+            .add("invariants")
+            .add("checkConstraints")
+            .add("changeDataFeed")
+            .add("columnMapping")
+            .build();
 
     public enum ColumnMappingMode
     {
@@ -119,9 +126,10 @@ public final class DeltaLakeSchemaSupport
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapperProvider().get();
 
-    public static boolean isAppendOnly(MetadataEntry metadataEntry)
+    public static boolean isAppendOnly(MetadataEntry metadataEntry, ProtocolEntry protocolEntry)
     {
-        return parseBoolean(metadataEntry.getConfiguration().getOrDefault(APPEND_ONLY_CONFIGURATION_KEY, "false"));
+        return parseBoolean(metadataEntry.getConfiguration().getOrDefault(APPEND_ONLY_CONFIGURATION_KEY, "false")) ||
+                protocolEntry.getWriterFeatures().map(features -> features.contains("appendOnly")).orElse(false);
     }
 
     public static ColumnMappingMode getColumnMappingMode(MetadataEntry metadata)
@@ -498,10 +506,10 @@ public final class DeltaLakeSchemaSupport
                 .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public static boolean changeDataFeedEnabled(MetadataEntry metadataEntry)
+    public static boolean changeDataFeedEnabled(MetadataEntry metadataEntry, ProtocolEntry protocolEntry)
     {
         String enableChangeDataFeed = metadataEntry.getConfiguration().getOrDefault("delta.enableChangeDataFeed", "false");
-        return parseBoolean(enableChangeDataFeed);
+        return parseBoolean(enableChangeDataFeed) || protocolEntry.getWriterFeatures().map(features -> features.contains("changeDataFeed")).orElse(false);
     }
 
     public static Map<String, Map<String, Object>> getColumnsMetadata(MetadataEntry metadataEntry)
@@ -547,6 +555,11 @@ public final class DeltaLakeSchemaSupport
     public static Set<String> unsupportedReaderFeatures(Set<String> features)
     {
         return Sets.difference(features, SUPPORTED_READER_FEATURES);
+    }
+
+    public static Set<String> unsupportedWriterFeatures(Set<String> features)
+    {
+        return Sets.difference(features, SUPPORTED_WRITER_FEATURES);
     }
 
     public static Type deserializeType(TypeManager typeManager, Object type, boolean usePhysicalName)

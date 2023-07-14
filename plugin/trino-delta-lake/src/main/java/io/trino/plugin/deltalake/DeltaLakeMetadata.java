@@ -235,6 +235,7 @@ import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.se
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.serializeSchemaAsJson;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.serializeStatsAsJson;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.unsupportedReaderFeatures;
+import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.unsupportedWriterFeatures;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.validateType;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.verifySupportedColumnMapping;
 import static io.trino.plugin.deltalake.transactionlog.MetadataEntry.DELTA_CHANGE_DATA_FEED_ENABLED_PROPERTY;
@@ -319,7 +320,7 @@ public class DeltaLakeMetadata
     public static final int DEFAULT_WRITER_VERSION = 2;
     // The highest reader and writer versions Trino supports
     private static final int MAX_READER_VERSION = 3;
-    public static final int MAX_WRITER_VERSION = 6;
+    public static final int MAX_WRITER_VERSION = 7;
     private static final int CDF_SUPPORTED_WRITER_VERSION = 4;
     private static final int COLUMN_MAPPING_MODE_SUPPORTED_READER_VERSION = 2;
     private static final int COLUMN_MAPPING_MODE_SUPPORTED_WRITER_VERSION = 5;
@@ -1224,6 +1225,8 @@ public class DeltaLakeMetadata
         if (columnMappingMode != ID && columnMappingMode != NAME && columnMappingMode != NONE) {
             throw new TrinoException(NOT_SUPPORTED, "Setting a table comment with column mapping %s is not supported".formatted(columnMappingMode.name().toLowerCase(ENGLISH)));
         }
+        ProtocolEntry protocolEntry = getProtocolEntry(session, handle);
+        checkUnsupportedWriterFeature(protocolEntry);
 
         ConnectorTableMetadata tableMetadata = getTableMetadata(session, handle);
 
@@ -1241,7 +1244,7 @@ public class DeltaLakeMetadata
                     SET_TBLPROPERTIES_OPERATION,
                     session,
                     comment,
-                    getProtocolEntry(session, handle));
+                    protocolEntry);
             transactionLogWriter.flush();
         }
         catch (Exception e) {
@@ -1260,6 +1263,8 @@ public class DeltaLakeMetadata
         if (columnMappingMode != ID && columnMappingMode != NAME && columnMappingMode != NONE) {
             throw new TrinoException(NOT_SUPPORTED, "Setting a column comment with column mapping %s is not supported".formatted(columnMappingMode.name().toLowerCase(ENGLISH)));
         }
+        ProtocolEntry protocolEntry = getProtocolEntry(session, deltaLakeTableHandle);
+        checkUnsupportedWriterFeature(protocolEntry);
 
         ConnectorTableMetadata tableMetadata = getTableMetadata(session, deltaLakeTableHandle);
 
@@ -1299,7 +1304,7 @@ public class DeltaLakeMetadata
                     CHANGE_COLUMN_OPERATION,
                     session,
                     Optional.ofNullable(deltaLakeTableHandle.getMetadataEntry().getDescription()),
-                    getProtocolEntry(session, deltaLakeTableHandle));
+                    protocolEntry);
             transactionLogWriter.flush();
         }
         catch (Exception e) {
@@ -1325,9 +1330,11 @@ public class DeltaLakeMetadata
         DeltaLakeTableHandle handle = checkValidTableHandle(tableHandle);
         checkSupportedWriterVersion(session, handle);
         ColumnMappingMode columnMappingMode = getColumnMappingMode(handle.getMetadataEntry());
-        if (changeDataFeedEnabled(handle.getMetadataEntry()) && CHANGE_DATA_FEED_COLUMN_NAMES.contains(newColumnMetadata.getName())) {
+        ProtocolEntry protocolEntry = getProtocolEntry(session, handle);
+        if (changeDataFeedEnabled(handle.getMetadataEntry(), protocolEntry) && CHANGE_DATA_FEED_COLUMN_NAMES.contains(newColumnMetadata.getName())) {
             throw new TrinoException(NOT_SUPPORTED, "Column name %s is forbidden when change data feed is enabled".formatted(newColumnMetadata.getName()));
         }
+        checkUnsupportedWriterFeature(protocolEntry);
 
         if (!newColumnMetadata.isNullable() && !transactionLogAccess.getActiveFiles(getSnapshot(handle.getSchemaTableName(), handle.getLocation(), session), session).isEmpty()) {
             throw new TrinoException(DELTA_LAKE_BAD_WRITE, format("Unable to add NOT NULL column '%s' for non-empty table: %s.%s", newColumnMetadata.getName(), handle.getSchemaName(), handle.getTableName()));
@@ -1391,7 +1398,7 @@ public class DeltaLakeMetadata
                     ADD_COLUMN_OPERATION,
                     session,
                     Optional.ofNullable(handle.getMetadataEntry().getDescription()),
-                    getProtocolEntry(session, handle));
+                    protocolEntry);
             transactionLogWriter.flush();
         }
         catch (Exception e) {
@@ -1407,6 +1414,8 @@ public class DeltaLakeMetadata
         verify(deltaLakeColumn.isBaseColumn(), "Unexpected dereference: %s", deltaLakeColumn);
         String dropColumnName = deltaLakeColumn.getBaseColumnName();
         MetadataEntry metadataEntry = table.getMetadataEntry();
+        ProtocolEntry protocolEntry = getProtocolEntry(session, table);
+        checkUnsupportedWriterFeature(protocolEntry);
 
         checkSupportedWriterVersion(session, table);
         ColumnMappingMode columnMappingMode = getColumnMappingMode(metadataEntry);
@@ -1453,7 +1462,7 @@ public class DeltaLakeMetadata
                     DROP_COLUMN_OPERATION,
                     session,
                     Optional.ofNullable(metadataEntry.getDescription()),
-                    getProtocolEntry(session, table));
+                    protocolEntry);
             transactionLogWriter.flush();
         }
         catch (Exception e) {
@@ -1484,9 +1493,11 @@ public class DeltaLakeMetadata
         DeltaLakeColumnHandle deltaLakeColumn = (DeltaLakeColumnHandle) columnHandle;
         verify(deltaLakeColumn.isBaseColumn(), "Unexpected dereference: %s", deltaLakeColumn);
         String sourceColumnName = deltaLakeColumn.getBaseColumnName();
+        ProtocolEntry protocolEntry = getProtocolEntry(session, table);
+        checkUnsupportedWriterFeature(protocolEntry);
 
         checkSupportedWriterVersion(session, table);
-        if (changeDataFeedEnabled(table.getMetadataEntry())) {
+        if (changeDataFeedEnabled(table.getMetadataEntry(), protocolEntry)) {
             throw new TrinoException(NOT_SUPPORTED, "Cannot rename column when change data feed is enabled");
         }
 
@@ -1535,7 +1546,7 @@ public class DeltaLakeMetadata
                     RENAME_COLUMN_OPERATION,
                     session,
                     Optional.ofNullable(metadataEntry.getDescription()),
-                    getProtocolEntry(session, table));
+                    protocolEntry);
             transactionLogWriter.flush();
             // Don't update extended statistics because it uses physical column names internally
         }
@@ -1654,6 +1665,7 @@ public class DeltaLakeMetadata
                     table.getSchemaTableName(),
                     tableLocation,
                     table.getMetadataEntry(),
+                    getProtocolEntry(session, table),
                     inputColumns,
                     getMandatoryCurrentVersion(fileSystem, tableLocation),
                     retryMode != NO_RETRIES);
@@ -1798,12 +1810,13 @@ public class DeltaLakeMetadata
     public ConnectorMergeTableHandle beginMerge(ConnectorSession session, ConnectorTableHandle tableHandle, RetryMode retryMode)
     {
         DeltaLakeTableHandle handle = (DeltaLakeTableHandle) tableHandle;
-        if (isAppendOnly(handle.getMetadataEntry())) {
+        ProtocolEntry protocolEntry = getProtocolEntry(session, handle);
+        if (isAppendOnly(handle.getMetadataEntry(), protocolEntry)) {
             throw new TrinoException(NOT_SUPPORTED, "Cannot modify rows from a table with '" + APPEND_ONLY_CONFIGURATION_KEY + "' set to true");
         }
         checkWriteAllowed(session, handle);
         ColumnMappingMode columnMappingMode = getColumnMappingMode(handle.getMetadataEntry());
-        if (changeDataFeedEnabled(handle.getMetadataEntry()) && columnMappingMode != NONE) {
+        if (changeDataFeedEnabled(handle.getMetadataEntry(), protocolEntry) && columnMappingMode != NONE) {
             // TODO https://github.com/trinodb/trino/issues/16967 Support CDF for tables with 'id' and 'name' column mapping
             throw new TrinoException(NOT_SUPPORTED, "Unsupported column mapping mode for tables with change data feed enabled: " + columnMappingMode.name().toLowerCase(ENGLISH));
         }
@@ -1929,6 +1942,8 @@ public class DeltaLakeMetadata
             RetryMode retryMode)
     {
         DeltaLakeTableHandle tableHandle = checkValidTableHandle(connectorTableHandle);
+        ProtocolEntry protocolEntry = getProtocolEntry(session, tableHandle);
+        checkUnsupportedWriterFeature(protocolEntry);
 
         DeltaLakeTableProcedureId procedureId;
         try {
@@ -2130,7 +2145,15 @@ public class DeltaLakeMetadata
         if (getColumnIdentities(handle.getMetadataEntry()).values().stream().anyMatch(identity -> identity)) {
             throw new TrinoException(NOT_SUPPORTED, "Writing to tables with identity columns is not supported");
         }
-        // TODO: Check writer-features
+        checkUnsupportedWriterFeature(getProtocolEntry(session, handle));
+    }
+
+    private static void checkUnsupportedWriterFeature(ProtocolEntry protocolEntry)
+    {
+        Set<String> unsupportedWriterFeatures = unsupportedWriterFeatures(protocolEntry.getWriterFeatures().orElse(ImmutableSet.of()));
+        if (!unsupportedWriterFeatures.isEmpty()) {
+            throw new TrinoException(NOT_SUPPORTED, "Unsupported writer feature: " + unsupportedWriterFeatures);
+        }
     }
 
     private void checkUnsupportedGeneratedColumns(MetadataEntry metadataEntry)

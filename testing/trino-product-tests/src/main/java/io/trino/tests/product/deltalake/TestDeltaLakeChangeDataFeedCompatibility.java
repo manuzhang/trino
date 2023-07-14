@@ -26,7 +26,10 @@ import static io.trino.tempto.assertions.QueryAssert.Row.row;
 import static io.trino.tempto.assertions.QueryAssert.assertQueryFailure;
 import static io.trino.testing.TestingNames.randomNameSuffix;
 import static io.trino.tests.product.TestGroups.DELTA_LAKE_DATABRICKS;
+import static io.trino.tests.product.TestGroups.DELTA_LAKE_EXCLUDE_104;
+import static io.trino.tests.product.TestGroups.DELTA_LAKE_EXCLUDE_113;
 import static io.trino.tests.product.TestGroups.DELTA_LAKE_EXCLUDE_73;
+import static io.trino.tests.product.TestGroups.DELTA_LAKE_EXCLUDE_91;
 import static io.trino.tests.product.TestGroups.DELTA_LAKE_OSS;
 import static io.trino.tests.product.TestGroups.PROFILE_SPECIFIC_TESTS;
 import static io.trino.tests.product.deltalake.util.DeltaLakeTestUtils.DATABRICKS_COMMUNICATION_FAILURE_ISSUE;
@@ -85,6 +88,44 @@ public class TestDeltaLakeChangeDataFeedCompatibility
         }
         finally {
             onTrino().executeQuery("DROP TABLE IF EXISTS delta.default." + tableName);
+        }
+    }
+
+    @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_OSS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, DELTA_LAKE_EXCLUDE_104, DELTA_LAKE_EXCLUDE_113, PROFILE_SPECIFIC_TESTS})
+    @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)
+    public void testUpdateTableWithChangeDataFeedWriterFeature()
+    {
+        String tableName = "test_change_data_feed_writer_feature_" + randomNameSuffix();
+        try {
+            onDelta().executeQuery("CREATE TABLE default." + tableName +
+                    "(col1 STRING, updated_column INT) " +
+                    "USING DELTA " +
+                    "LOCATION 's3://" + bucketName + "/databricks-compatibility-test-" + tableName + "'" +
+                    "TBLPROPERTIES ('delta.minWriterVersion'='7', 'delta.enableChangeDataFeed'=true)");
+
+            assertThat(onTrino().executeQuery("SHOW CREATE TABLE delta.default." + tableName).getOnlyValue().toString()).contains("change_data_feed_enabled = true");
+
+            onDelta().executeQuery("INSERT INTO default." + tableName + " VALUES ('testValue1', 1)");
+            onDelta().executeQuery("INSERT INTO default." + tableName + " VALUES ('testValue2', 2)");
+            onDelta().executeQuery("INSERT INTO default." + tableName + " VALUES ('testValue3', 3)");
+            onTrino().executeQuery("UPDATE delta.default." + tableName +
+                    " SET updated_column = 5 WHERE col1 = 'testValue3'");
+            onTrino().executeQuery("UPDATE delta.default." + tableName +
+                    " SET updated_column = 4, col1 = 'testValue4' WHERE col1 = 'testValue3'");
+
+            assertThat(onDelta().executeQuery("SELECT col1, updated_column, _change_type, _commit_version " +
+                    "FROM table_changes('default." + tableName + "', 0)"))
+                    .containsOnly(
+                            row("testValue1", 1, "insert", 1L),
+                            row("testValue2", 2, "insert", 2L),
+                            row("testValue3", 3, "insert", 3L),
+                            row("testValue3", 3, "update_preimage", 4L),
+                            row("testValue3", 5, "update_postimage", 4L),
+                            row("testValue3", 5, "update_preimage", 5L),
+                            row("testValue4", 4, "update_postimage", 5L));
+        }
+        finally {
+            dropDeltaTableWithRetry(tableName);
         }
     }
 

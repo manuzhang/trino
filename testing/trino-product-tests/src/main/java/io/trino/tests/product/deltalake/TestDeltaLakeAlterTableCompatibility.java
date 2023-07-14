@@ -13,6 +13,7 @@
  */
 package io.trino.tests.product.deltalake;
 
+import io.trino.tempto.query.QueryExecutionException;
 import io.trino.testng.services.Flaky;
 import org.testng.annotations.Test;
 
@@ -77,17 +78,23 @@ public class TestDeltaLakeAlterTableCompatibility
         String tableName = "test_dl_add_column_unsupported_writer_" + randomNameSuffix();
         String tableDirectory = "databricks-compatibility-test-" + tableName;
 
-        onDelta().executeQuery(format("" +
-                        "CREATE TABLE default.%s (col int) " +
-                        "USING DELTA LOCATION 's3://%s/%s'" +
-                        "TBLPROPERTIES ('delta.minWriterVersion'='7')",
-                tableName,
-                bucketName,
-                tableDirectory));
+        try {
+            onDelta().executeQuery(format("" +
+                            "CREATE TABLE default.%s (col int) " +
+                            "USING DELTA LOCATION 's3://%s/%s'" +
+                            "TBLPROPERTIES ('delta.minWriterVersion'='8')",
+                    tableName,
+                    bucketName,
+                    tableDirectory));
+        }
+        catch (QueryExecutionException e) {
+            assertThat(e).hasMessageContaining("delta.minWriterVersion needs to be an integer between [1, 7]");
+            return;
+        }
 
         try {
             assertQueryFailure(() -> onTrino().executeQuery("ALTER TABLE delta.default." + tableName + " ADD COLUMN new_col int"))
-                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 7 which is not supported");
+                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 8 which is not supported");
         }
         finally {
             dropDeltaTableWithRetry("default." + tableName);
@@ -190,17 +197,23 @@ public class TestDeltaLakeAlterTableCompatibility
         String tableName = "test_dl_comment_table_unsupported_writer_" + randomNameSuffix();
         String tableDirectory = "databricks-compatibility-test-" + tableName;
 
-        onDelta().executeQuery(format("" +
-                        "CREATE TABLE default.%s (col int) " +
-                        "USING DELTA LOCATION 's3://%s/%s'" +
-                        "TBLPROPERTIES ('delta.minWriterVersion'='7')",
-                tableName,
-                bucketName,
-                tableDirectory));
+        try {
+            onDelta().executeQuery(format("" +
+                            "CREATE TABLE default.%s (col int) " +
+                            "USING DELTA LOCATION 's3://%s/%s'" +
+                            "TBLPROPERTIES ('delta.minWriterVersion'='8')",
+                    tableName,
+                    bucketName,
+                    tableDirectory));
+        }
+        catch (QueryExecutionException e) {
+            assertThat(e).hasMessageContaining("delta.minWriterVersion needs to be an integer between [1, 7]");
+            return;
+        }
 
         try {
             assertQueryFailure(() -> onTrino().executeQuery("COMMENT ON TABLE delta.default." + tableName + " IS 'test comment'"))
-                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 7 which is not supported");
+                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 8 which is not supported");
         }
         finally {
             onTrino().executeQuery("DROP TABLE delta.default." + tableName);
@@ -236,17 +249,23 @@ public class TestDeltaLakeAlterTableCompatibility
         String tableName = "test_dl_comment_column_unsupported_writer_" + randomNameSuffix();
         String tableDirectory = "databricks-compatibility-test-" + tableName;
 
-        onDelta().executeQuery(format("" +
-                        "CREATE TABLE default.%s (col int) " +
-                        "USING DELTA LOCATION 's3://%s/%s'" +
-                        "TBLPROPERTIES ('delta.minWriterVersion'='7')",
-                tableName,
-                bucketName,
-                tableDirectory));
+        try {
+            onDelta().executeQuery(format("" +
+                            "CREATE TABLE default.%s (col int) " +
+                            "USING DELTA LOCATION 's3://%s/%s'" +
+                            "TBLPROPERTIES ('delta.minWriterVersion'='8')",
+                    tableName,
+                    bucketName,
+                    tableDirectory));
+        }
+        catch (QueryExecutionException e) {
+            assertThat(e).hasMessageContaining("delta.minWriterVersion needs to be an integer between [1, 7]");
+            return;
+        }
 
         try {
             assertQueryFailure(() -> onTrino().executeQuery("COMMENT ON COLUMN delta.default." + tableName + ".col IS 'test column comment'"))
-                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 7 which is not supported");
+                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 8 which is not supported");
         }
         finally {
             onTrino().executeQuery("DROP TABLE delta.default." + tableName);
@@ -260,17 +279,23 @@ public class TestDeltaLakeAlterTableCompatibility
         String tableName = "test_dl_optimize_unsupported_writer_" + randomNameSuffix();
         String tableDirectory = "databricks-compatibility-test-" + tableName;
 
-        onDelta().executeQuery(format("" +
-                        "CREATE TABLE default.%s (col int) " +
-                        "USING DELTA LOCATION 's3://%s/%s'" +
-                        "TBLPROPERTIES ('delta.minWriterVersion'='7')",
-                tableName,
-                bucketName,
-                tableDirectory));
+        try {
+            onDelta().executeQuery(format("" +
+                            "CREATE TABLE default.%s (col int) " +
+                            "USING DELTA LOCATION 's3://%s/%s'" +
+                            "TBLPROPERTIES ('delta.minWriterVersion'='8')",
+                    tableName,
+                    bucketName,
+                    tableDirectory));
+        }
+        catch (QueryExecutionException e) {
+            assertThat(e).hasMessageContaining("delta.minWriterVersion needs to be an integer between [1, 7]");
+            return;
+        }
 
         try {
             assertQueryFailure(() -> onTrino().executeQuery("ALTER TABLE delta.default." + tableName + " EXECUTE OPTIMIZE"))
-                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 7 which is not supported");
+                    .hasMessageMatching(".* Table .* requires Delta Lake writer version 8 which is not supported");
         }
         finally {
             dropDeltaTableWithRetry(tableName);

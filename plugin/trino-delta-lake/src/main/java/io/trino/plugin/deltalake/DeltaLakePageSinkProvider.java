@@ -183,7 +183,7 @@ public class DeltaLakePageSinkProvider
                 tableHandle.getInputColumns(),
                 domainCompactionThreshold,
                 () -> createCdfPageSink(merge, session),
-                changeDataFeedEnabled(tableHandle.getMetadataEntry()),
+                changeDataFeedEnabled(tableHandle.getMetadataEntry(), tableHandle.getProtocolEntry()),
                 parquetSchemaMapping);
     }
 

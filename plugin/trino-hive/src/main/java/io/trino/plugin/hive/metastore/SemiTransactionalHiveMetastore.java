@@ -468,12 +468,13 @@ public class SemiTransactionalHiveMetastore
         return databaseQueryId.isPresent() && databaseQueryId.get().equals(queryId);
     }
 
-    public synchronized void dropDatabase(ConnectorSession session, String schemaName)
+    public synchronized void dropDatabase(ConnectorSession session, String schemaName, boolean cascade)
     {
         Optional<Path> location = delegate.getDatabase(schemaName)
                 .orElseThrow(() -> new SchemaNotFoundException(schemaName))
                 .getLocation()
                 .map(Path::new);
+        List<String> allTableNames = cascade ? getAllTables(schemaName) : ImmutableList.of();
 
         setExclusive((delegate, hdfsEnvironment) -> {
             // If we see files in the schema location, don't delete it.
@@ -490,7 +491,12 @@ public class SemiTransactionalHiveMetastore
                 }
             }).orElse(deleteSchemaLocationsFallback);
 
-            delegate.dropDatabase(schemaName, deleteData);
+            if (cascade) {
+                allTableNames.forEach(tableName -> delegate.dropTable(schemaName, tableName, true));
+                deleteData = true;
+            }
+
+            delegate.dropDatabase(schemaName, deleteData, cascade);
         });
     }
 

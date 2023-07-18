@@ -533,7 +533,7 @@ public class GlueHiveMetastore
 
     // TODO: respect deleteData
     @Override
-    public void dropDatabase(String databaseName, boolean deleteData)
+    public void dropDatabase(String databaseName, boolean deleteData, boolean cascade)
     {
         Optional<String> location = Optional.empty();
         if (deleteData) {

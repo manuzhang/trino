@@ -955,7 +955,7 @@ public class ThriftHiveMetastore
     }
 
     @Override
-    public void dropDatabase(String databaseName, boolean deleteData)
+    public void dropDatabase(String databaseName, boolean deleteData, boolean cascade)
     {
         try {
             retry()
@@ -963,7 +963,7 @@ public class ThriftHiveMetastore
                     .stopOnIllegalExceptions()
                     .run("dropDatabase", stats.getDropDatabase().wrap(() -> {
                         try (ThriftMetastoreClient client = createMetastoreClient()) {
-                            client.dropDatabase(databaseName, deleteData, false);
+                            client.dropDatabase(databaseName, deleteData, cascade);
                         }
                         return null;
                     }));

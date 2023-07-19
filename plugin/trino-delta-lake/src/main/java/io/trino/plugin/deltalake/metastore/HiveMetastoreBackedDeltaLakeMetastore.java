@@ -102,9 +102,15 @@ public class HiveMetastoreBackedDeltaLakeMetastore
     }
 
     @Override
-    public void dropDatabase(String databaseName, boolean deleteData)
+    public void dropDatabase(String databaseName, boolean deleteData, boolean cascade)
     {
-        delegate.dropDatabase(databaseName, deleteData, false);
+        if (cascade) {
+            for (String tableName : delegate.getAllTables(databaseName)) {
+                delegate.dropTable(databaseName, tableName, true);
+            }
+            deleteData = true;
+        }
+        delegate.dropDatabase(databaseName, deleteData, cascade);
     }
 
     @Override

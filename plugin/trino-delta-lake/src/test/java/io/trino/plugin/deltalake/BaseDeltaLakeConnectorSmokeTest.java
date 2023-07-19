@@ -424,6 +424,29 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
     }
 
     @Test
+    public void testDropSchemaCascadeWithNonDeltaTable()
+    {
+        String schemaName = "test_drop_schema_cascade_hive_table" + randomNameSuffix();
+        String tableName = "test_hive_table" + randomNameSuffix();
+        String externalTableName = "test_hive_external_table" + randomNameSuffix();
+        String viewName = "test_hive_view" + randomNameSuffix();
+        String schemaLocation = getLocationForTable(bucketName, schemaName);
+
+        assertUpdate("CREATE SCHEMA " + schemaName + " WITH (location = '" + schemaLocation + "')");
+        hiveMinioDataLake.getHiveHadoop().runOnHive(format("CREATE TABLE %s.%s AS SELECT 1 a", schemaName, tableName));
+        hiveMinioDataLake.getHiveHadoop().runOnHive(format("CREATE EXTERNAL TABLE %s.%s(a INT) LOCATION '%s/%s'", schemaName, externalTableName, schemaLocation, tableName));
+        hiveMinioDataLake.getHiveHadoop().runOnHive(format("CREATE VIEW %s.%s AS SELECT * FROM %s.customer", schemaName, viewName, SCHEMA));
+
+        assertThat(metastore.getTable(schemaName, tableName)).isNotEmpty();
+        assertThat(hiveMinioDataLake.listFiles(schemaName)).isNotEmpty();
+
+        assertUpdate("DROP SCHEMA " + schemaName + " CASCADE");
+
+        assertThat(metastore.getTable(schemaName, tableName)).isEmpty();
+        assertThat(hiveMinioDataLake.listFiles(schemaName)).isEmpty();
+    }
+
+    @Test
     public void testHiveViewsCannotBeAccessed()
     {
         String viewName = "dummy_view";

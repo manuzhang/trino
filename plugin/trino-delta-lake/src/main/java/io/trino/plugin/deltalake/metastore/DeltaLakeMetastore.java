@@ -36,7 +36,7 @@ public interface DeltaLakeMetastore
 
     void createDatabase(Database database);
 
-    void dropDatabase(String databaseName, boolean deleteData);
+    void dropDatabase(String databaseName, boolean deleteData, boolean cascade);
 
     void createTable(ConnectorSession session, Table table, PrincipalPrivileges principalPrivileges);
 

@@ -763,7 +763,7 @@ public class DeltaLakeMetadata
     }
 
     @Override
-    public void dropSchema(ConnectorSession session, String schemaName)
+    public void dropSchema(ConnectorSession session, String schemaName, boolean cascade)
     {
         Optional<String> location = metastore.getDatabase(schemaName)
                 .orElseThrow(() -> new SchemaNotFoundException(schemaName))
@@ -781,7 +781,7 @@ public class DeltaLakeMetadata
             }
         }).orElse(deleteSchemaLocationsFallback);
 
-        metastore.dropDatabase(schemaName, deleteData);
+        metastore.dropDatabase(schemaName, deleteData, cascade);
     }
 
     @Override

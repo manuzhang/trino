@@ -16,6 +16,7 @@ package io.trino.plugin.hive.metastore.procedure;
 import com.google.common.collect.ImmutableList;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
+import io.trino.plugin.base.util.Reflection;
 import io.trino.plugin.hive.HiveErrorCode;
 import io.trino.plugin.hive.metastore.cache.CachingHiveMetastore;
 import io.trino.spi.StandardErrorCode;
@@ -31,7 +32,6 @@ import java.util.Optional;
 import static com.google.common.base.Preconditions.checkState;
 import static io.trino.spi.type.VarcharType.VARCHAR;
 import static java.lang.String.format;
-import static java.lang.invoke.MethodHandles.lookup;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
 
@@ -69,17 +69,8 @@ public class FlushMetadataCacheProcedure
             PARAM_PARTITION_COLUMN.toLowerCase(ENGLISH),
             PARAM_PARTITION_VALUE.toLowerCase(ENGLISH));
 
-    private static final MethodHandle FLUSH_HIVE_METASTORE_CACHE;
-
-    static {
-        try {
-            FLUSH_HIVE_METASTORE_CACHE = lookup().unreflect(FlushMetadataCacheProcedure.class.getMethod(
-                    "flushMetadataCache", String.class, String.class, List.class, List.class, List.class, List.class));
-        }
-        catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
-    }
+    private static final MethodHandle FLUSH_HIVE_METASTORE_CACHE = Reflection.methodHandle(FlushMetadataCacheProcedure.class,
+            "flushMetadataCache", String.class, String.class, List.class, List.class, List.class, List.class);
 
     private final Optional<CachingHiveMetastore> cachingHiveMetastore;
 

@@ -42,8 +42,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.google.common.base.Verify.verify;
-import static io.trino.plugin.hive.ViewReaderUtil.isHiveOrPrestoView;
-import static io.trino.plugin.hive.ViewReaderUtil.isPrestoView;
+import static io.trino.plugin.hive.ViewReaderUtil.isTrinoView;
 import static io.trino.plugin.hive.metastore.glue.converter.GlueToTrinoConverter.getTableParameters;
 import static io.trino.plugin.hive.metastore.glue.converter.GlueToTrinoConverter.getTableType;
 import static io.trino.plugin.hive.util.HiveUtil.isIcebergTable;
@@ -94,7 +93,7 @@ public class GlueIcebergTableOperations
         glueVersionId = table.getVersionId();
 
         Map<String, String> parameters = getTableParameters(table);
-        if (isPrestoView(parameters) && isHiveOrPrestoView(getTableType(table))) {
+        if (isTrinoView(getTableType(table), parameters)) {
             // this is a Trino/Presto view, hence not a table
             throw new TableNotFoundException(getSchemaTableName());
         }

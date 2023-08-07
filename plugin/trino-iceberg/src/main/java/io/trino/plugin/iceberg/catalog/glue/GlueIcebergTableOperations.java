@@ -95,7 +95,7 @@ public class GlueIcebergTableOperations
 
         Map<String, String> parameters = getTableParameters(table);
         if (isPrestoView(parameters) && isHiveOrPrestoView(getTableType(table))) {
-            // this is a Presto Hive view, hence not a table
+            // this is a Trino/Presto view, hence not a table
             throw new TableNotFoundException(getSchemaTableName());
         }
         if (!isIcebergTable(parameters)) {

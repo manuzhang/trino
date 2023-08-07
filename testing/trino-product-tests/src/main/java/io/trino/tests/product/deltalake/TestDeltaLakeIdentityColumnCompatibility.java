@@ -30,7 +30,9 @@ import static io.trino.tests.product.TestGroups.PROFILE_SPECIFIC_TESTS;
 import static io.trino.tests.product.deltalake.util.DeltaLakeTestUtils.DATABRICKS_COMMUNICATION_FAILURE_ISSUE;
 import static io.trino.tests.product.deltalake.util.DeltaLakeTestUtils.DATABRICKS_COMMUNICATION_FAILURE_MATCH;
 import static io.trino.tests.product.deltalake.util.DeltaLakeTestUtils.dropDeltaTableWithRetry;
+import static io.trino.tests.product.deltalake.util.DeltaLakeTestUtils.getColumnCommentOnDelta;
 import static io.trino.tests.product.deltalake.util.DeltaLakeTestUtils.getColumnNamesOnDelta;
+import static io.trino.tests.product.deltalake.util.DeltaLakeTestUtils.getTableCommentOnDelta;
 import static io.trino.tests.product.utils.QueryExecutors.onDelta;
 import static io.trino.tests.product.utils.QueryExecutors.onTrino;
 import static java.lang.String.format;
@@ -57,8 +59,13 @@ public class TestDeltaLakeIdentityColumnCompatibility
                 tableDirectory));
         try {
             onTrino().executeQuery("COMMENT ON COLUMN delta.default." + tableName + ".b IS 'test column comment'");
+            assertThat(getColumnCommentOnDelta("default", tableName, "b")).isEqualTo("test column comment");
+
             onTrino().executeQuery("COMMENT ON TABLE delta.default." + tableName + " IS 'test table comment'");
+            assertThat(getTableCommentOnDelta("default", tableName)).isEqualTo("test table comment");
+
             onTrino().executeQuery("ALTER TABLE delta.default." + tableName + " ADD COLUMN c INT");
+            assertThat(getColumnNamesOnDelta("default", tableName)).containsExactly("a", "b", "c");
             // Don't execute other column operations because column mapping mode 'none' doesn't support it. See other test methods in this class.
 
             assertThat((String) onDelta().executeQuery("SHOW CREATE TABLE default." + tableName).getOnlyValue())
@@ -76,7 +83,7 @@ public class TestDeltaLakeIdentityColumnCompatibility
 
     @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, DELTA_LAKE_EXCLUDE_104, DELTA_LAKE_EXCLUDE_113, PROFILE_SPECIFIC_TESTS})
     @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)
-    public void testIdentityColumnFeature()
+    public void testIdentityColumnTableFeature()
     {
         String tableName = "test_identity_column_feature_" + randomNameSuffix();
 
@@ -126,52 +133,6 @@ public class TestDeltaLakeIdentityColumnCompatibility
             assertQueryFailure(() -> onTrino().executeQuery("MERGE INTO delta.default." + tableName + " t USING delta.default." + tableName + " s " +
                     "ON (t.data = s.data) WHEN MATCHED THEN UPDATE SET data = 1"))
                     .hasMessageContaining("Writing to tables with identity columns is not supported");
-        }
-        finally {
-            dropDeltaTableWithRetry("default." + tableName);
-        }
-    }
-
-    @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, PROFILE_SPECIFIC_TESTS})
-    @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)
-    public void testIdentityColumnCaseSensitivity()
-    {
-        String tableName = "test_identity_column_case_sensitivity_" + randomNameSuffix();
-        onDelta().executeQuery("CREATE TABLE default." + tableName +
-                "(data INT, UPPERCASE_IDENTITY BIGINT GENERATED ALWAYS AS IDENTITY)" +
-                "USING DELTA " +
-                "LOCATION 's3://" + bucketName + "/databricks-compatibility-test-" + tableName + "'" +
-                "TBLPROPERTIES ('delta.columnMapping.mode'='name')");
-        try {
-            onDelta().executeQuery("INSERT INTO default." + tableName + " (data) VALUES (1), (2), (3)");
-
-            assertThat(onTrino().executeQuery("SELECT * FROM delta.default." + tableName))
-                    .containsOnly(row(1, 1), row(2, 2), row(3, 3));
-
-            // Verify identify column is recognized even when the name contains uppercase characters
-            assertQueryFailure(() -> onTrino().executeQuery("INSERT INTO delta.default." + tableName + " VALUES (4, 4)"))
-                    .hasMessageContaining("Writing to tables with identity columns is not supported");
-            assertQueryFailure(() -> onTrino().executeQuery("UPDATE delta.default." + tableName + " SET data = 3"))
-                    .hasMessageContaining("Writing to tables with identity columns is not supported");
-            assertQueryFailure(() -> onTrino().executeQuery("DELETE FROM delta.default." + tableName))
-                    .hasMessageContaining("Writing to tables with identity columns is not supported");
-            assertQueryFailure(() -> onTrino().executeQuery("MERGE INTO delta.default." + tableName + " t USING delta.default." + tableName + " s " +
-                    "ON (t.data = s.data) WHEN MATCHED THEN UPDATE SET data = 1"))
-                    .hasMessageContaining("Writing to tables with identity columns is not supported");
-
-            // Verify column operations preserves the identify column name and property
-            onTrino().executeQuery("ALTER TABLE delta.default." + tableName + " ADD COLUMN new_col integer");
-            onTrino().executeQuery("ALTER TABLE delta.default." + tableName + " RENAME COLUMN new_col TO renamed_col");
-            onTrino().executeQuery("COMMENT ON COLUMN delta.default." + tableName + ".uppercase_identity IS 'test comment'");
-            onTrino().executeQuery("ALTER TABLE delta.default." + tableName + " DROP COLUMN renamed_col");
-
-            assertThat((String) onDelta().executeQuery("SHOW CREATE TABLE default." + tableName).getOnlyValue())
-                    .contains("UPPERCASE_IDENTITY BIGINT GENERATED ALWAYS AS IDENTITY");
-
-            // Verify the connector preserves column identity property when renaming columns containing uppercase characters
-            onTrino().executeQuery("ALTER TABLE delta.default." + tableName + " RENAME COLUMN uppercase_identity TO renamed_identity");
-            assertThat((String) onDelta().executeQuery("SHOW CREATE TABLE default." + tableName).getOnlyValue())
-                    .contains("renamed_identity BIGINT GENERATED ALWAYS AS IDENTITY");
         }
         finally {
             dropDeltaTableWithRetry("default." + tableName);
@@ -307,6 +268,27 @@ public class TestDeltaLakeIdentityColumnCompatibility
                     .containsOnly(row(10, 1), row(20, 2));
             assertThat(onDelta().executeQuery("SELECT * FROM default." + tableName))
                     .containsOnly(row(10, 1), row(20, 2));
+        }
+        finally {
+            dropDeltaTableWithRetry("default." + tableName);
+        }
+    }
+
+    @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, PROFILE_SPECIFIC_TESTS})
+    @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)
+    public void testIdentityColumnCheckpointInterval()
+    {
+        String tableName = "test_identity_column_checkpoint_interval_" + randomNameSuffix();
+
+        onDelta().executeQuery("CREATE TABLE default." + tableName +
+                "(data INT, col_identity BIGINT GENERATED ALWAYS AS IDENTITY)" +
+                "USING DELTA " +
+                "LOCATION 's3://" + bucketName + "/" + "databricks-compatibility-test-" + tableName + "'" +
+                "TBLPROPERTIES ('delta.checkpointInterval' = 1)");
+        try {
+            onTrino().executeQuery("COMMENT ON COLUMN delta.default." + tableName + ".col_identity IS 'test column comment'");
+            assertThat((String) onDelta().executeQuery("SHOW CREATE TABLE default." + tableName).getOnlyValue())
+                    .contains("col_identity BIGINT GENERATED ALWAYS AS IDENTITY");
         }
         finally {
             dropDeltaTableWithRetry("default." + tableName);

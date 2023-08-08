@@ -17,5 +17,5 @@ import io.trino.spi.Page;
 
 import java.util.function.Function;
 
-public interface PagePreprocessor
+public interface PageFilter
         extends Function<Page, Page> {}

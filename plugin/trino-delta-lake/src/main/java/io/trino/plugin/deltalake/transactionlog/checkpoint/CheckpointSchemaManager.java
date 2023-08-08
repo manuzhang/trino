@@ -34,8 +34,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
-import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.deletionVectorsEnabled;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.extractSchema;
+import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.isDeletionVectorEnabled;
 import static io.trino.plugin.deltalake.transactionlog.TransactionLogAccess.columnsWithStats;
 import static java.util.Objects.requireNonNull;
 
@@ -115,7 +115,7 @@ public class CheckpointSchemaManager
     {
         List<DeltaLakeColumnMetadata> allColumns = extractSchema(metadataEntry, typeManager);
         List<DeltaLakeColumnMetadata> minMaxColumns = columnsWithStats(metadataEntry, typeManager);
-        boolean deletionVectorEnabled = deletionVectorsEnabled(metadataEntry.getConfiguration());
+        boolean deletionVectorEnabled = isDeletionVectorEnabled(metadataEntry);
 
         ImmutableList.Builder<RowType.Field> minMaxFields = ImmutableList.builder();
         for (DeltaLakeColumnMetadata dataColumn : minMaxColumns) {

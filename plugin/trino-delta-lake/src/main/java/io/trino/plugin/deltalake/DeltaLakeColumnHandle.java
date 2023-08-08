@@ -45,7 +45,6 @@ public class DeltaLakeColumnHandle
     private static final int INSTANCE_SIZE = instanceSize(DeltaLakeColumnHandle.class);
 
     public static final String ROW_POSITION_COLUMN_NAME = "$row_position";
-
     public static final String ROW_ID_COLUMN_NAME = "$row_id";
 
     public static final Type MERGE_ROW_ID_TYPE = rowType(

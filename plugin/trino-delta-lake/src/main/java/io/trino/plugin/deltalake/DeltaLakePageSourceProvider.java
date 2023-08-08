@@ -26,7 +26,7 @@ import io.trino.filesystem.TrinoInputFile;
 import io.trino.parquet.ParquetDataSource;
 import io.trino.parquet.ParquetReaderOptions;
 import io.trino.parquet.reader.MetadataReader;
-import io.trino.plugin.deltalake.delete.PagePreprocessor;
+import io.trino.plugin.deltalake.delete.PageFilter;
 import io.trino.plugin.deltalake.delete.PositionDeleteFilter;
 import io.trino.plugin.deltalake.transactionlog.DeletionVectorEntry;
 import io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.ColumnMappingMode;
@@ -241,7 +241,7 @@ public class DeltaLakePageSourceProvider
                         column -> ((HiveColumnHandle) column).getType(),
                         HivePageSourceProvider::getProjection));
 
-        Supplier<Optional<PagePreprocessor>> deletePredicate = Suppliers.memoize(() -> {
+        Supplier<Optional<PageFilter>> deletePredicate = Suppliers.memoize(() -> {
             if (split.getDeletionVector().isEmpty()) {
                 return Optional.empty();
             }

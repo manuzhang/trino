@@ -35,7 +35,7 @@ public final class PositionDeleteFilter
         this.deletedRows = deletedRows;
     }
 
-    public PagePreprocessor createPredicate(List<DeltaLakeColumnHandle> columns)
+    public PageFilter createPredicate(List<DeltaLakeColumnHandle> columns)
     {
         int filePositionChannel = rowPositionChannel(columns);
 

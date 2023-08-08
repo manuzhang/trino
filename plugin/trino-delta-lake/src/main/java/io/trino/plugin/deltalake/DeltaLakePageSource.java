@@ -15,7 +15,7 @@ package io.trino.plugin.deltalake;
 
 import io.airlift.json.JsonCodec;
 import io.airlift.json.JsonCodecFactory;
-import io.trino.plugin.deltalake.delete.PagePreprocessor;
+import io.trino.plugin.deltalake.delete.PageFilter;
 import io.trino.plugin.hive.ReaderProjectionsAdapter;
 import io.trino.spi.Page;
 import io.trino.spi.TrinoException;
@@ -65,7 +65,7 @@ public class DeltaLakePageSource
     private final Block partitionsBlock;
     private final ConnectorPageSource delegate;
     private final Optional<ReaderProjectionsAdapter> projectionsAdapter;
-    private final Supplier<Optional<PagePreprocessor>> deletePredicate;
+    private final Supplier<Optional<PageFilter>> deletePredicate;
 
     public DeltaLakePageSource(
             List<DeltaLakeColumnHandle> columns,
@@ -77,7 +77,7 @@ public class DeltaLakePageSource
             String path,
             long fileSize,
             long fileModifiedTime,
-            Supplier<Optional<PagePreprocessor>> deletePredicate)
+            Supplier<Optional<PageFilter>> deletePredicate)
     {
         int size = columns.size();
         requireNonNull(partitionKeys, "partitionKeys is null");
@@ -173,7 +173,7 @@ public class DeltaLakePageSource
             if (projectionsAdapter.isPresent()) {
                 dataPage = projectionsAdapter.get().adaptPage(dataPage);
             }
-            Optional<PagePreprocessor> deleteFilterPredicate = deletePredicate.get();
+            Optional<PageFilter> deleteFilterPredicate = deletePredicate.get();
             if (deleteFilterPredicate.isPresent()) {
                 dataPage = deleteFilterPredicate.get().apply(dataPage);
             }

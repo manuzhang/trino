@@ -124,9 +124,9 @@ public final class DeltaLakeSchemaSupport
         return parseBoolean(metadataEntry.getConfiguration().getOrDefault(APPEND_ONLY_CONFIGURATION_KEY, "false"));
     }
 
-    public static boolean deletionVectorsEnabled(Map<String, String> configuration)
+    public static boolean isDeletionVectorEnabled(MetadataEntry metadataEntry)
     {
-        return parseBoolean(configuration.get(DELETION_VECTORS_CONFIGURATION_KEY));
+        return parseBoolean(metadataEntry.getConfiguration().get(DELETION_VECTORS_CONFIGURATION_KEY));
     }
 
     public static ColumnMappingMode getColumnMappingMode(MetadataEntry metadata)

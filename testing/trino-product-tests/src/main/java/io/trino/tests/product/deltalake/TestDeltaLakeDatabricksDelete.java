@@ -20,6 +20,7 @@ import io.trino.testing.DataProviders;
 import io.trino.testng.services.Flaky;
 import io.trino.tests.product.deltalake.util.DatabricksVersion;
 import org.testng.SkipException;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.util.List;
@@ -51,9 +52,8 @@ public class TestDeltaLakeDatabricksDelete
     private Optional<DatabricksVersion> databricksRuntimeVersion;
 
     @BeforeMethodWithContext
-    public void setup()
+    public void determineDatabricksVersion()
     {
-        super.setUp();
         databricksRuntimeVersion = getDatabricksRuntimeVersion();
     }
 
@@ -81,9 +81,9 @@ public class TestDeltaLakeDatabricksDelete
     }
 
     // Databricks 12.1 and OSS Delta 2.4.0 added support for deletion vectors
-    @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_OSS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, DELTA_LAKE_EXCLUDE_104, DELTA_LAKE_EXCLUDE_113, PROFILE_SPECIFIC_TESTS})
+    @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_OSS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, DELTA_LAKE_EXCLUDE_104, DELTA_LAKE_EXCLUDE_113, PROFILE_SPECIFIC_TESTS}, dataProvider = "columnMappingModeDataProvider")
     @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)
-    public void testDeletionVectors()
+    public void testDeletionVectors(String mode)
     {
         String tableName = "test_deletion_vectors_" + randomNameSuffix();
         onDelta().executeQuery("" +
@@ -91,10 +91,17 @@ public class TestDeltaLakeDatabricksDelete
                 "         (a INT, b INT)" +
                 "         USING delta " +
                 "         LOCATION 's3://" + bucketName + "/databricks-compatibility-test-" + tableName + "' " +
-                "         TBLPROPERTIES ('delta.enableDeletionVectors' = true)");
+                "         TBLPROPERTIES ('delta.enableDeletionVectors' = true, 'delta.columnMapping.mode' = '" + mode + "')");
         try {
             onDelta().executeQuery("INSERT INTO default." + tableName + " VALUES (1,11), (2, 22)");
-            onDelta().executeQuery("DELETE FROM default." + tableName + " WHERE a = 2");
+            if (databricksRuntimeVersion.isEmpty() && (mode.equals("name") || mode.equals("id"))) {
+                assertQueryFailure(() -> onDelta().executeQuery("DELETE FROM default." + tableName + " WHERE a = 2"))
+                        .hasMessageContaining("Can't resolve column __delta_internal_row_index in root");
+                throw new SkipException("OSS Delta Lake doesn't support deletion vectors with column mapping mode 'name' and 'id'");
+            }
+            else {
+                onDelta().executeQuery("DELETE FROM default." + tableName + " WHERE a = 2");
+            }
 
             assertThat(onDelta().executeQuery("SELECT * FROM default." + tableName))
                     .containsOnly(row(1, 11));
@@ -162,6 +169,47 @@ public class TestDeltaLakeDatabricksDelete
                     .containsOnly(row(1, 11));
             assertThat(onTrino().executeQuery("SELECT * FROM delta.default." + tableName))
                     .containsOnly(row(1, 11));
+        }
+        finally {
+            dropDeltaTableWithRetry("default." + tableName);
+        }
+    }
+
+    @Test(groups = {DELTA_LAKE_DATABRICKS, DELTA_LAKE_OSS, DELTA_LAKE_EXCLUDE_73, DELTA_LAKE_EXCLUDE_91, DELTA_LAKE_EXCLUDE_104, DELTA_LAKE_EXCLUDE_113, PROFILE_SPECIFIC_TESTS})
+    @Flaky(issue = DATABRICKS_COMMUNICATION_FAILURE_ISSUE, match = DATABRICKS_COMMUNICATION_FAILURE_MATCH)
+    public void testDisableDeletionVectors()
+    {
+        String tableName = "test_deletion_vectors_random_prefix_" + randomNameSuffix();
+        onDelta().executeQuery("" +
+                "CREATE TABLE default." + tableName +
+                "(a INT, b INT)" +
+                "USING delta " +
+                "LOCATION 's3://" + bucketName + "/databricks-compatibility-test-" + tableName + "' " +
+                "TBLPROPERTIES ('delta.enableDeletionVectors' = true)");
+        try {
+            onDelta().executeQuery("INSERT INTO default." + tableName + " VALUES (1, 11), (2, 22), (3, 33)");
+            onDelta().executeQuery("DELETE FROM default." + tableName + " WHERE a = 2");
+
+            onDelta().executeQuery("ALTER TABLE default." + tableName + " SET TBLPROPERTIES ('delta.enableDeletionVectors' = false)");
+            assertThat(onDelta().executeQuery("SELECT * FROM default." + tableName))
+                    .containsOnly(row(1, 11), row(3, 33));
+            assertThat(onTrino().executeQuery("SELECT * FROM delta.default." + tableName))
+                    .containsOnly(row(1, 11), row(3, 33));
+
+            // Delete rows which already existed before disabling deletion vectors
+            onDelta().executeQuery("DELETE FROM default." + tableName);
+            assertThat(onDelta().executeQuery("SELECT * FROM default." + tableName))
+                    .hasNoRows();
+            assertThat(onTrino().executeQuery("SELECT * FROM delta.default." + tableName))
+                    .hasNoRows();
+
+            // Insert new rows and delete it after disabling deletion vectors
+            onDelta().executeQuery("INSERT INTO default." + tableName + " VALUES (4, 44), (5, 55)");
+            onDelta().executeQuery("DELETE FROM default." + tableName + " WHERE a = 4");
+            assertThat(onDelta().executeQuery("SELECT * FROM default." + tableName))
+                    .containsOnly(row(5, 55));
+            assertThat(onTrino().executeQuery("SELECT * FROM delta.default." + tableName))
+                    .containsOnly(row(5, 55));
         }
         finally {
             dropDeltaTableWithRetry("default." + tableName);
@@ -410,5 +458,15 @@ public class TestDeltaLakeDatabricksDelete
         finally {
             dropDeltaTableWithRetry("default." + tableName);
         }
+    }
+
+    @DataProvider
+    public Object[][] columnMappingModeDataProvider()
+    {
+        return new Object[][] {
+                {"none"},
+                {"name"},
+                {"id"}
+        };
     }
 }
